@@ -1,0 +1,36 @@
+/* Simple responsive styling for the planner */
+:root{
+  --bg:#0f1724;
+  --card:#0b1220;
+  --accent:#ff6b6b;
+  --muted:#9aa4b2;
+  --glass: rgba(255,255,255,0.03);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,system-ui,-apple-system,Arial;background:linear-gradient(180deg,#071029 0%, #0b1220 100%);color:#e6eef8}
+header{padding:20px;text-align:center}
+h1{margin:.2rem 0;font-size:1.6rem}
+.container{display:flex;gap:20px;max-width:1100px;margin:10px auto;padding:16px}
+.planner{flex:2;background:var(--card);padding:16px;border-radius:10px;box-shadow:0 6px 30px rgba(2,6,23,0.6)}
+.saved-list{flex:1;background:var(--card);padding:16px;border-radius:10px;height:fit-content}
+.row{display:flex;flex-direction:column;margin-bottom:10px}
+#exercises .exercise-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+.exercise-row input{padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:var(--glass);color:inherit}
+.exercise-row .ex-name{flex:2}
+.exercise-row .ex-sets,.exercise-row .ex-reps,.exercise-row .ex-rest{width:80px}
+.remove-ex{background:transparent;border:0;color:#ff9b9b;font-weight:700;cursor:pointer;padding:6px}
+.exercise-row textarea.ex-desc{flex-basis:100%;min-height:56px;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:var(--glass);color:inherit;margin-top:6px;resize:vertical}
+
+/* Library grid styles */
+.exercise-library{margin-bottom:12px;background:linear-gradient(180deg,#07172a,#072033);padding:12px;border-radius:8px}
+.library-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:8px}
+.lib-card{background:rgba(255,255,255,0.03);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;display:flex;flex-direction:column;gap:6px;min-height:120px}
+.lib-card .lib-name{font-weight:600}
+.lib-card textarea{flex:1;background:transparent;border:1px solid rgba(255,255,255,0.04);padding:6px;border-radius:6px;color:inherit;resize:vertical}
+.lib-card .lib-check{align-self:flex-end}
+.lib-card.selected{outline:2px solid rgba(255,107,107,0.9);box-shadow:0 6px 18px rgba(255,75,75,0.08)}
+.muted{color:var(--muted);font-size:0.9rem}
+@media (max-width:800px){
+  .container{flex-direction:column;padding:10px}
+}

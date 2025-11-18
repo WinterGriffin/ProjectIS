@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym Helper</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+      /* small helper for panel switching */
+      .hidden{display:none}
+      .module-nav{display:flex;gap:8px;justify-content:center;margin-bottom:12px}
+      .module-btn{padding:8px 12px;border-radius:8px;border:0;cursor:pointer;background:#1a2330;color:#e6eef8}
+      .module-btn.active{background:linear-gradient(180deg,#ff7b7b,#ff4b4b);color:white}
+      @media (max-width:800px){ .module-nav{flex-wrap:wrap} }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="topbar">
+            <nav class="module-nav" role="navigation" aria-label="Modules">
+                <button class="module-btn active" data-target="planner">Exercise Planner</button>
+                <button class="module-btn" data-target="calories">Calorie Calculator</button>
+                <button class="module-btn" data-target="meals">Meal Planner</button>
+            </nav>
+        </div>
+
+        <h1>Gym Helper</h1>
+        <p>Create workouts, add exercises, save and export plans.</p>
+    </header>
+
+    <main class="container">
+        <!-- Exercise Planner panel (existing content) -->
+        <section id="planner" class="planner module-panel">
+
+            <!-- Exercise Library: selectable grid of 50 items -->
+            <div class="exercise-library">
+                <h2>Exercise Library</h2>
+                <p class="muted">Click cards to select exercises. Add selected items to your workout.</p>
+                <div id="libraryGrid" class="library-grid" aria-live="polite"></div>
+                <div style="margin-top:8px">
+                    <button id="addSelectedBtn" type="button">Add Selected to Workout</button>
+                </div>
+            </div>
+
+            <form id="workoutForm">
+                <div class="row">
+                    <label for="workoutName">Workout name</label>
+                    <input id="workoutName" type="text" placeholder="e.g. Push Day" required>
+                </div>
+                <div id="exercises">
+                    <!-- exercise rows inserted here -->
+                </div>
+                <div class="controls">
+                    <button id="addExercise" type="button">Add Exercise</button>
+                    <button type="submit" id="saveWorkout">Save Workout</button>
+                    <button id="clearForm" type="button">Clear</button>
+                </div>
+            </form>
+
+            <div class="import-export">
+                <button id="exportAll">Export JSON</button>
+                <input id="importFile" type="file" accept="application/json" style="display:none">
+                <button id="importBtn">Import JSON</button>
+                <button id="clearAll">Clear All Saved</button>
+            </div>
+        </section>
+
+        <!-- Calorie Calculator panel (placeholder) -->
+        <section id="calories" class="module-panel hidden">
+            <div class="planner">
+                <h2>Calorie Calculator</h2>
+                <p>Placeholder UI — add inputs (age, sex, weight, height, activity) and calculation logic in app.js or a new script.</p>
+            </div>
+        </section>
+
+        <!-- Meal Planner panel (placeholder) -->
+        <section id="meals" class="module-panel hidden">
+            <div class="planner">
+                <h2>Meal Planner</h2>
+                <p>Placeholder UI — create meals, assign calories/macros, and save plans. Implement features in app.js as needed.</p>
+            </div>
+        </section>
+
+        <aside class="saved-list">
+            <h2>Saved Workouts</h2>
+            <ul id="workoutList"></ul>
+            <p id="emptyHint">No workouts yet. Create one above.</p>
+        </aside>
+    </main>
+
+    <template id="exerciseTpl">
+        <div class="exercise-row">
+            <input class="ex-name" placeholder="Exercise (e.g. Bench Press)" required>
+            <input class="ex-sets" placeholder="Sets" type="number" min="1" value="" required>
+            <input class="ex-reps" placeholder="Reps" type="text" value="" required>
+            <input class="ex-rest" placeholder="Rest (s)" type="number" min="0" value="">
+            <textarea class="ex-desc" placeholder="Description (optional)"></textarea>
+            <button class="remove-ex" type="button" title="Remove exercise">✕</button>
+        </div>
+    </template>
+
+    <script>
+      (function(){
+        const btns = document.querySelectorAll('.module-btn');
+        const panels = document.querySelectorAll('.module-panel');
+        function show(target){
+          panels.forEach(p => p.classList.toggle('hidden', p.id !== target));
+          btns.forEach(b => b.classList.toggle('active', b.dataset.target === target));
+        }
+        btns.forEach(b => b.addEventListener('click', ()=> show(b.dataset.target)));
+        // ensure planner visible on load
+        show('planner');
+      })();
+    </script>
+
+    <script src="app.js"></script>
+</body>
+</html>
