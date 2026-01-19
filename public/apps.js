@@ -1,5 +1,6 @@
-// Simple client-side app ported from React file. Persists to localStorage.
 (() => {
+  const API_URL = '/api'; // Vercel serverless functions
+  
   // --- DB ---
   const exerciseDatabase = [
     { id: 1, name: 'Push-ups', category: 'Chest', calories: 7 },
@@ -78,52 +79,122 @@
   const totalMealCaloriesEl = document.getElementById('totalMealCalories');
   const calDiffEl = document.getElementById('calDiff');
 
-  // --- State (persisted) ---
-  function loadUsers(){ return JSON.parse(localStorage.getItem('fb_users') || '{}'); }
-  function saveUsers(u){ localStorage.setItem('fb_users', JSON.stringify(u)); }
-  function loadCurrent(){ return localStorage.getItem('fb_current') || null; }
-  function setCurrent(username){ localStorage.setItem('fb_current', username); }
-  let users = loadUsers();
-  let currentUsername = loadCurrent();
-  let modeLogin = true; // auth mode
+  // --- State ---
+  let token = localStorage.getItem('token') || null;
+  let currentUser = null;
+  let modeLogin = true;
+
+  // --- API Functions ---
+  async function apiCall(endpoint, options = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: { ...headers, ...options.headers }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Request failed');
+      }
+      
+      return await response.json();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async function login(username, password) {
+    const data = await apiCall('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password })
+    });
+    token = data.token;
+    localStorage.setItem('token', token);
+    return data;
+  }
+
+  async function register(username, password) {
+    const data = await apiCall('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ username, password })
+    });
+    token = data.token;
+    localStorage.setItem('token', token);
+    return data;
+  }
+
+  async function fetchUser() {
+    return await apiCall('/user');
+  }
+
+  async function updateProfile(profile) {
+    return await apiCall('/user/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profile)
+    });
+  }
+
+  async function updateExercises(selectedExercises) {
+    return await apiCall('/user/exercises', {
+      method: 'PUT',
+      body: JSON.stringify({ selectedExercises })
+    });
+  }
+
+  async function updateMeals(selectedMeals) {
+    return await apiCall('/user/meals', {
+      method: 'PUT',
+      body: JSON.stringify({ selectedMeals })
+    });
+  }
+
+  async function updateCalorieGoal(calorieGoal) {
+    return await apiCall('/user/calorie-goal', {
+      method: 'PUT',
+      body: JSON.stringify({ calorieGoal })
+    });
+  }
+
+  async function updateSessions(workoutSessions) {
+    return await apiCall('/user/sessions', {
+      method: 'PUT',
+      body: JSON.stringify({ workoutSessions })
+    });
+  }
 
   // --- Auth ---
-  function setAuthMode(login){
+  function setAuthMode(login) {
     modeLogin = login;
     authSubmit.textContent = login ? 'Login' : 'Sign Up';
     authToggle.textContent = login ? 'Need an account? Sign up' : 'Already have an account? Login';
   }
+  
   authToggle.addEventListener('click', () => setAuthMode(!modeLogin));
 
-  authSubmit.addEventListener('click', () => {
+  authSubmit.addEventListener('click', async () => {
     const u = (authUsername.value || '').trim();
     const p = (authPassword.value || '').trim();
-    if (!u || !p){ alert('Please fill in all fields'); return; }
-    users = loadUsers();
-    if (modeLogin){
-      if (users[u] && users[u].password === p){
-        currentUsername = u; setCurrent(u); renderApp();
+    if (!u || !p) { alert('Please fill in all fields'); return; }
+    
+    try {
+      if (modeLogin) {
+        await login(u, p);
       } else {
-        alert('Invalid credentials');
+        await register(u, p);
       }
-    } else {
-      if (users[u]){ alert('Username already exists'); return; }
-      const newUser = {
-        password: p,
-        profile: { weight:'', height:'', age:'', gender:'' },
-        selectedExercises: [],
-        calorieGoal: 2000,
-        selectedMeals: [],
-        workoutSessions: []
-      };
-      users[u] = newUser;
-      saveUsers(users);
-      currentUsername = u; setCurrent(u); renderApp();
+      await renderApp();
+    } catch (error) {
+      alert(error.message);
     }
   });
 
   logoutBtn.addEventListener('click', () => {
-    currentUsername = null; setCurrent('');
+    token = null;
+    currentUser = null;
+    localStorage.removeItem('token');
     renderApp();
   });
 
@@ -135,18 +206,14 @@
   }
 
   // --- Helpers ---
-  function getCurrentUser(){ users = loadUsers(); if (!currentUsername) return null; return users[currentUsername]; }
-  function persistCurrentUser(updated){ users = loadUsers(); users[currentUsername] = updated; saveUsers(users); }
-
-  // reset auth inputs and ensure password hidden
   function resetAuthInputs() {
     if (authPassword) authPassword.type = 'password';
     if (showPassword) showPassword.checked = false;
     if (authUsername) authUsername.value = '';
     if (authPassword) authPassword.value = '';
-   }
+  }
 
-  function calcBMR(user){
+  function calcBMR(user) {
     const p = user.profile;
     const w = parseFloat(p.weight), h = parseFloat(p.height), a = parseFloat(p.age);
     if (!w || !h || !a || !p.gender) return null;
@@ -154,16 +221,15 @@
     return Math.round(bmr);
   }
 
-  // render UI parts
-  function renderProfile(){
-    const u = getCurrentUser();
-    if (!u) return;
-    inputWeight.value = u.profile.weight || '';
-    inputHeight.value = u.profile.height || '';
-    inputAge.value = u.profile.age || '';
-    inputGender.value = u.profile.gender || '';
-    const bmr = calcBMR(u);
-    if (bmr){
+  // --- Render Functions ---
+  function renderProfile() {
+    if (!currentUser) return;
+    inputWeight.value = currentUser.profile.weight || '';
+    inputHeight.value = currentUser.profile.height || '';
+    inputAge.value = currentUser.profile.age || '';
+    inputGender.value = currentUser.profile.gender || '';
+    const bmr = calcBMR(currentUser);
+    if (bmr) {
       bmrBox.classList.remove('hidden');
       bmrLose.textContent = bmr - 500;
       bmrMaintain.textContent = bmr;
@@ -174,21 +240,19 @@
   }
 
   function renderExercises(filter = '') {
-    const u = getCurrentUser();
+    if (!currentUser) return;
     exerciseList.innerHTML = '';
     const q = (filter || '').toLowerCase();
     exerciseDatabase
       .filter(ex => !q || ex.name.toLowerCase().includes(q) || ex.category.toLowerCase().includes(q))
       .forEach(ex => {
-        const isSelected = u.selectedExercises.find(s => s.id === ex.id);
+        const isSelected = currentUser.selectedExercises.find(s => s.id === ex.id);
         const el = document.createElement('label');
         el.className = 'item';
         el.innerHTML = `<input type="checkbox" ${isSelected ? 'checked' : ''} /> 
           <div class="meta"><div class="title">${ex.name}</div><div class="muted">${ex.category} • ~${ex.calories} cal/min</div></div>`;
         const chk = el.querySelector('input');
-        chk.addEventListener('change', () => {
-          toggleExercise(ex);
-        });
+        chk.addEventListener('change', () => toggleExercise(ex));
         el.addEventListener('click', (e) => {
           if(e.target.tagName !== 'INPUT') chk.checked = !chk.checked;
         });
@@ -198,14 +262,14 @@
     renderSessions();
   }
 
-  function renderSelectedExercises(){
-    const u = getCurrentUser();
+  function renderSelectedExercises() {
+    if (!currentUser) return;
     selectedExercisesEl.innerHTML = '';
-    if (!u.selectedExercises.length){
+    if (!currentUser.selectedExercises.length) {
       selectedExercisesEl.innerHTML = '<div class="muted">Select exercises to build your workout</div>';
       return;
     }
-    u.selectedExercises.forEach(ex => {
+    currentUser.selectedExercises.forEach(ex => {
       const div = document.createElement('div');
       div.className = 'item';
       div.innerHTML = `<div class="meta"><div class="title">${ex.name}</div><div class="muted">${ex.calories} cal/min</div></div>
@@ -215,32 +279,28 @@
     });
   }
 
-  function renderSessions(){
-    const u = getCurrentUser();
+  function renderSessions() {
+    if (!currentUser) return;
     sessionsList.innerHTML = '';
-    (u.workoutSessions || []).slice().reverse().forEach(sess => {
+    (currentUser.workoutSessions || []).slice().reverse().forEach(sess => {
       const div = document.createElement('div');
       div.className = 'item';
       div.innerHTML = `<div class="meta"><div class="title">${sess.name}</div><div class="muted">${sess.exercises.length} exercises</div></div>
                        <div style="display:flex;gap:8px"><button class="btn">Load</button><button class="btn ghost">Delete</button></div>`;
-      div.querySelector('button').addEventListener('click', () => {
-        loadWorkoutSession(sess);
-      });
-      div.querySelectorAll('button')[1].addEventListener('click', () => {
-        deleteWorkoutSession(sess.id);
-      });
+      div.querySelector('button').addEventListener('click', () => loadWorkoutSession(sess));
+      div.querySelectorAll('button')[1].addEventListener('click', () => deleteWorkoutSession(sess.id));
       sessionsList.appendChild(div);
     });
   }
 
-  function renderMeals(filter = ''){
-    const u = getCurrentUser();
+  function renderMeals(filter = '') {
+    if (!currentUser) return;
     mealList.innerHTML = '';
     const q = (filter || '').toLowerCase();
     mealDatabase
       .filter(m => !q || m.name.toLowerCase().includes(q) || m.category.toLowerCase().includes(q))
       .forEach(meal => {
-        const isSelected = u.selectedMeals.find(s => s.id === meal.id);
+        const isSelected = currentUser.selectedMeals.find(s => s.id === meal.id);
         const el = document.createElement('label');
         el.className = 'item';
         el.innerHTML = `<input type="checkbox" ${isSelected ? 'checked' : ''} /> 
@@ -255,18 +315,18 @@
     renderSelectedMeals();
   }
 
-  function renderSelectedMeals(){
-    const u = getCurrentUser();
+  function renderSelectedMeals() {
+    if (!currentUser) return;
     selectedMealsEl.innerHTML = '';
-    const total = (u.selectedMeals || []).reduce((s,m)=>s+m.calories,0);
+    const total = (currentUser.selectedMeals || []).reduce((s, m) => s + m.calories, 0);
     totalMealCaloriesEl.textContent = total;
-    const goal = u.calorieGoal || 2000;
+    const goal = currentUser.calorieGoal || 2000;
     calDiffEl.textContent = (total - goal);
-    if (!u.selectedMeals.length){
+    if (!currentUser.selectedMeals.length) {
       selectedMealsEl.innerHTML = '<div class="muted">Select meals to add to your daily plan</div>';
       return;
     }
-    u.selectedMeals.forEach(m => {
+    currentUser.selectedMeals.forEach(m => {
       const div = document.createElement('div');
       div.className = 'item';
       div.innerHTML = `<div class="meta"><div class="title">${m.name}</div><div class="muted">${m.calories} cal</div></div>
@@ -277,124 +337,157 @@
   }
 
   // --- Actions ---
-  function toggleExercise(exercise){
-    const u = getCurrentUser();
-    const exists = u.selectedExercises.find(s => s.id === exercise.id);
-    if (exists) u.selectedExercises = u.selectedExercises.filter(s => s.id !== exercise.id);
-    else u.selectedExercises.push(exercise);
-    persistCurrentUser(u);
-    renderExercises(exerciseSearch.value);
+  async function toggleExercise(exercise) {
+    const exists = currentUser.selectedExercises.find(s => s.id === exercise.id);
+    if (exists) {
+      currentUser.selectedExercises = currentUser.selectedExercises.filter(s => s.id !== exercise.id);
+    } else {
+      currentUser.selectedExercises.push(exercise);
+    }
+    try {
+      await updateExercises(currentUser.selectedExercises);
+      renderExercises(exerciseSearch.value);
+    } catch (error) {
+      alert('Failed to update exercises');
+    }
   }
 
-  function toggleMeal(meal){
-    const u = getCurrentUser();
-    const exists = u.selectedMeals.find(s => s.id === meal.id);
-    if (exists) u.selectedMeals = u.selectedMeals.filter(s => s.id !== meal.id);
-    else u.selectedMeals.push(meal);
-    persistCurrentUser(u);
-    renderMeals(mealSearch.value);
+  async function toggleMeal(meal) {
+    const exists = currentUser.selectedMeals.find(s => s.id === meal.id);
+    if (exists) {
+      currentUser.selectedMeals = currentUser.selectedMeals.filter(s => s.id !== meal.id);
+    } else {
+      currentUser.selectedMeals.push(meal);
+    }
+    try {
+      await updateMeals(currentUser.selectedMeals);
+      renderMeals(mealSearch.value);
+    } catch (error) {
+      alert('Failed to update meals');
+    }
   }
 
-  function updateProfile(field, value){
-    const u = getCurrentUser();
-    u.profile[field] = value;
-    persistCurrentUser(u);
-    renderProfile();
+  async function updateProfileField(field, value) {
+    currentUser.profile[field] = value;
+    try {
+      await updateProfile(currentUser.profile);
+      renderProfile();
+    } catch (error) {
+      alert('Failed to update profile');
+    }
   }
 
-  function updateCalorieGoal(value){
-    const u = getCurrentUser();
-    u.calorieGoal = parseInt(value) || 2000;
-    persistCurrentUser(u);
-    renderSelectedMeals();
+  async function updateCalorieGoalValue(value) {
+    currentUser.calorieGoal = parseInt(value) || 2000;
+    try {
+      await updateCalorieGoal(currentUser.calorieGoal);
+      renderSelectedMeals();
+    } catch (error) {
+      alert('Failed to update calorie goal');
+    }
   }
 
-  function saveWorkoutSessionAction(){
+  async function saveWorkoutSessionAction() {
     const name = (sessionName.value || '').trim();
-    if (!name){ alert('Please enter a session name'); return; }
-    const u = getCurrentUser();
-    const newSession = { id: Date.now(), name, exercises: u.selectedExercises.slice() };
-    u.workoutSessions = (u.workoutSessions || []).concat(newSession);
-    u.selectedExercises = [];
-    persistCurrentUser(u);
-    sessionName.value = '';
-    renderExercises(exerciseSearch.value);
+    if (!name) { alert('Please enter a session name'); return; }
+    const newSession = { id: Date.now(), name, exercises: currentUser.selectedExercises.slice() };
+    currentUser.workoutSessions = (currentUser.workoutSessions || []).concat(newSession);
+    currentUser.selectedExercises = [];
+    try {
+      await updateSessions(currentUser.workoutSessions);
+      await updateExercises(currentUser.selectedExercises);
+      sessionName.value = '';
+      renderExercises(exerciseSearch.value);
+    } catch (error) {
+      alert('Failed to save session');
+    }
   }
 
-  function loadWorkoutSession(session){
-    const u = getCurrentUser();
-    u.selectedExercises = session.exercises.slice();
-    persistCurrentUser(u);
-    renderExercises(exerciseSearch.value);
+  async function loadWorkoutSession(session) {
+    currentUser.selectedExercises = session.exercises.slice();
+    try {
+      await updateExercises(currentUser.selectedExercises);
+      renderExercises(exerciseSearch.value);
+    } catch (error) {
+      alert('Failed to load session');
+    }
   }
 
-  function deleteWorkoutSession(sessionId){
-    const u = getCurrentUser();
-    u.workoutSessions = (u.workoutSessions || []).filter(s => s.id !== sessionId);
-    persistCurrentUser(u);
-    renderSessions();
+  async function deleteWorkoutSession(sessionId) {
+    currentUser.workoutSessions = (currentUser.workoutSessions || []).filter(s => s.id !== sessionId);
+    try {
+      await updateSessions(currentUser.workoutSessions);
+      renderSessions();
+    } catch (error) {
+      alert('Failed to delete session');
+    }
   }
 
   // UI wiring
   exerciseSearch.addEventListener('input', () => renderExercises(exerciseSearch.value));
   mealSearch.addEventListener('input', () => renderMeals(mealSearch.value));
-  inputWeight.addEventListener('input', () => updateProfile('weight', inputWeight.value));
-  inputHeight.addEventListener('input', () => updateProfile('height', inputHeight.value));
-  inputAge.addEventListener('input', () => updateProfile('age', inputAge.value));
-  inputGender.addEventListener('change', () => updateProfile('gender', inputGender.value));
+  inputWeight.addEventListener('input', () => updateProfileField('weight', inputWeight.value));
+  inputHeight.addEventListener('input', () => updateProfileField('height', inputHeight.value));
+  inputAge.addEventListener('input', () => updateProfileField('age', inputAge.value));
+  inputGender.addEventListener('change', () => updateProfileField('gender', inputGender.value));
   saveSession.addEventListener('click', saveWorkoutSessionAction);
-  clearSelection.addEventListener('click', () => {
-    const u = getCurrentUser(); u.selectedExercises = []; persistCurrentUser(u); renderExercises();
+  clearSelection.addEventListener('click', async () => {
+    currentUser.selectedExercises = [];
+    await updateExercises(currentUser.selectedExercises);
+    renderExercises();
   });
-  calorieGoalInput.addEventListener('input', () => updateCalorieGoal(calorieGoalInput.value));
+  calorieGoalInput.addEventListener('input', () => updateCalorieGoalValue(calorieGoalInput.value));
 
   // Tabs
-  function setActiveTab(tab){
-    tabProfile.classList.remove('active'); tabExercises.classList.remove('active'); tabMeals.classList.remove('active');
-    panelProfile.classList.add('hidden'); panelExercises.classList.add('hidden'); panelMeals.classList.add('hidden');
-    if (tab === 'profile'){ tabProfile.classList.add('active'); panelProfile.classList.remove('hidden'); }
-    if (tab === 'exercises'){ tabExercises.classList.add('active'); panelExercises.classList.remove('hidden'); }
-    if (tab === 'meals'){ tabMeals.classList.add('active'); panelMeals.classList.remove('hidden'); }
+  function setActiveTab(tab) {
+    tabProfile.classList.remove('active'); 
+    tabExercises.classList.remove('active'); 
+    tabMeals.classList.remove('active');
+    panelProfile.classList.add('hidden'); 
+    panelExercises.classList.add('hidden'); 
+    panelMeals.classList.add('hidden');
+    if (tab === 'profile') { tabProfile.classList.add('active'); panelProfile.classList.remove('hidden'); }
+    if (tab === 'exercises') { tabExercises.classList.add('active'); panelExercises.classList.remove('hidden'); }
+    if (tab === 'meals') { tabMeals.classList.add('active'); panelMeals.classList.remove('hidden'); }
   }
-  tabProfile.addEventListener('click', ()=> setActiveTab('profile'));
-  tabExercises.addEventListener('click', ()=> setActiveTab('exercises'));
-  tabMeals.addEventListener('click', ()=> setActiveTab('meals'));
+  
+  tabProfile.addEventListener('click', () => setActiveTab('profile'));
+  tabExercises.addEventListener('click', () => setActiveTab('exercises'));
+  tabMeals.addEventListener('click', () => setActiveTab('meals'));
 
   // Main render
-  function renderApp(){
-    users = loadUsers();
-    if (!currentUsername || !users[currentUsername]){
-      // show auth
+  async function renderApp() {
+    if (!token) {
       authContainer.classList.remove('hidden');
       appEl.classList.add('hidden');
       setAuthMode(true);
       resetAuthInputs();
       return;
     }
-    authContainer.classList.add('hidden');
-    appEl.classList.remove('hidden');
-    welcomeText.textContent = `Welcome, ${currentUsername}!`;
-    const user = getCurrentUser();
-    // init defaults
-    if (!user.calorieGoal) user.calorieGoal = 2000;
-    if (!user.selectedExercises) user.selectedExercises = [];
-    if (!user.selectedMeals) user.selectedMeals = [];
-    if (!user.workoutSessions) user.workoutSessions = [];
-    persistCurrentUser(user);
 
-    inputWeight.value = user.profile.weight || '';
-    inputHeight.value = user.profile.height || '';
-    inputAge.value = user.profile.age || '';
-    inputGender.value = user.profile.gender || '';
-    calorieGoalInput.value = user.calorieGoal || 2000;
+    try {
+      currentUser = await fetchUser();
+      authContainer.classList.add('hidden');
+      appEl.classList.remove('hidden');
+      welcomeText.textContent = `Welcome, ${currentUser.username}!`;
 
-    setActiveTab('profile');
-    renderProfile();
-    renderExercises();
-    renderMeals();
+      inputWeight.value = currentUser.profile.weight || '';
+      inputHeight.value = currentUser.profile.height || '';
+      inputAge.value = currentUser.profile.age || '';
+      inputGender.value = currentUser.profile.gender || '';
+      calorieGoalInput.value = currentUser.calorieGoal || 2000;
+
+      setActiveTab('profile');
+      renderProfile();
+      renderExercises();
+      renderMeals();
+    } catch (error) {
+      token = null;
+      localStorage.removeItem('token');
+      renderApp();
+    }
   }
 
-  // bootstrap
+  // Bootstrap
   renderApp();
-
 })();
