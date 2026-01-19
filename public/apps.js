@@ -83,6 +83,7 @@
   let token = localStorage.getItem('token') || null;
   let currentUser = null;
   let modeLogin = true;
+  let currentUsername = null;
 
   // --- API Functions ---
   async function apiCall(endpoint, options = {}) {
@@ -177,23 +178,43 @@
   authSubmit.addEventListener('click', async () => {
     const u = (authUsername.value || '').trim();
     const p = (authPassword.value || '').trim();
-    if (!u || !p) { alert('Please fill in all fields'); return; }
-    
+    if (!u || !p){ alert('Please fill in all fields'); return; }
+
+    const endpoint = modeLogin ? '/api/auth/login' : '/api/auth/register';  // Adjust to your actual login endpoint
     try {
-      if (modeLogin) {
-        await login(u, p);
-      } else {
-        await register(u, p);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: u, password: p })
+      });
+
+      if (!response.ok) {
+        let errorMsg = 'An error occurred';
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+          errorMsg = response.statusText || errorMsg;
+        }
+        alert(errorMsg);
+        return;
       }
-      await renderApp();
-    } catch (error) {
-      alert(error.message);
+
+      const data = await response.json();
+      if (data.token) {  // API returns { token, username } on success
+        localStorage.setItem('token', data.token);
+        currentUsername = data.username;
+        renderApp();
+      } else {
+        alert('Unexpected response');
+      }
+    } catch (err) {
+      alert('Network error: ' + err.message);
     }
   });
 
   logoutBtn.addEventListener('click', () => {
-    token = null;
-    currentUser = null;
+    currentUsername = null;
     localStorage.removeItem('token');
     renderApp();
   });
@@ -457,7 +478,9 @@
 
   // Main render
   async function renderApp() {
-    if (!token) {
+    const token = localStorage.getItem('token');
+    if (!token){
+      // show auth
       authContainer.classList.remove('hidden');
       appEl.classList.add('hidden');
       setAuthMode(true);
@@ -465,27 +488,23 @@
       return;
     }
 
-    try {
-      currentUser = await fetchUser();
-      authContainer.classList.add('hidden');
-      appEl.classList.remove('hidden');
-      welcomeText.textContent = `Welcome, ${currentUser.username}!`;
+    // Optionally fetch user data with token
+    // fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()).then(user => { cachedUser = user; ... })
 
-      inputWeight.value = currentUser.profile.weight || '';
-      inputHeight.value = currentUser.profile.height || '';
-      inputAge.value = currentUser.profile.age || '';
-      inputGender.value = currentUser.profile.gender || '';
-      calorieGoalInput.value = currentUser.calorieGoal || 2000;
+    authContainer.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    welcomeText.textContent = `Welcome, ${currentUsername}!`;
 
-      setActiveTab('profile');
-      renderProfile();
-      renderExercises();
-      renderMeals();
-    } catch (error) {
-      token = null;
-      localStorage.removeItem('token');
-      renderApp();
-    }
+    inputWeight.value = currentUser.profile.weight || '';
+    inputHeight.value = currentUser.profile.height || '';
+    inputAge.value = currentUser.profile.age || '';
+    inputGender.value = currentUser.profile.gender || '';
+    calorieGoalInput.value = currentUser.calorieGoal || 2000;
+
+    setActiveTab('profile');
+    renderProfile();
+    renderExercises();
+    renderMeals();
   }
 
   // Bootstrap
