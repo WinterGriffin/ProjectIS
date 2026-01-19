@@ -1,0 +1,5 @@
+-moved frontend to "public" folder
+-added api stuff
+-added library stuff
+-added vercel.json
+-one of the .json files doesn't work. suspecting it to be package.json
