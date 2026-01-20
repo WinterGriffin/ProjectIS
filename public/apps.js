@@ -1,3 +1,4 @@
+// public/apps.js - Frontend for Vercel
 (() => {
   const API_URL = '/api'; // Vercel serverless functions
   
@@ -83,7 +84,6 @@
   let token = localStorage.getItem('token') || null;
   let currentUser = null;
   let modeLogin = true;
-  let currentUsername = null;
 
   // --- API Functions ---
   async function apiCall(endpoint, options = {}) {
@@ -178,43 +178,23 @@
   authSubmit.addEventListener('click', async () => {
     const u = (authUsername.value || '').trim();
     const p = (authPassword.value || '').trim();
-    if (!u || !p){ alert('Please fill in all fields'); return; }
-
-    const endpoint = modeLogin ? '/api/auth/login' : '/api/auth/register';  // Adjust to your actual login endpoint
+    if (!u || !p) { alert('Please fill in all fields'); return; }
+    
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u, password: p })
-      });
-
-      if (!response.ok) {
-        let errorMsg = 'An error occurred';
-        try {
-          const errorData = await response.json();
-          errorMsg = errorData.error || errorMsg;
-        } catch (e) {
-          errorMsg = response.statusText || errorMsg;
-        }
-        alert(errorMsg);
-        return;
-      }
-
-      const data = await response.json();
-      if (data.token) {  // API returns { token, username } on success
-        localStorage.setItem('token', data.token);
-        currentUsername = data.username;
-        renderApp();
+      if (modeLogin) {
+        await login(u, p);
       } else {
-        alert('Unexpected response');
+        await register(u, p);
       }
-    } catch (err) {
-      alert('Network error: ' + err.message);
+      await renderApp();
+    } catch (error) {
+      alert(error.message);
     }
   });
 
   logoutBtn.addEventListener('click', () => {
-    currentUsername = null;
+    token = null;
+    currentUser = null;
     localStorage.removeItem('token');
     renderApp();
   });
@@ -244,7 +224,7 @@
 
   // --- Render Functions ---
   function renderProfile() {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.profile) return;
     inputWeight.value = currentUser.profile.weight || '';
     inputHeight.value = currentUser.profile.height || '';
     inputAge.value = currentUser.profile.age || '';
@@ -261,7 +241,7 @@
   }
 
   function renderExercises(filter = '') {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.selectedExercises) return;
     exerciseList.innerHTML = '';
     const q = (filter || '').toLowerCase();
     exerciseDatabase
@@ -284,7 +264,7 @@
   }
 
   function renderSelectedExercises() {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.selectedExercises) return;
     selectedExercisesEl.innerHTML = '';
     if (!currentUser.selectedExercises.length) {
       selectedExercisesEl.innerHTML = '<div class="muted">Select exercises to build your workout</div>';
@@ -301,7 +281,7 @@
   }
 
   function renderSessions() {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.workoutSessions) return;
     sessionsList.innerHTML = '';
     (currentUser.workoutSessions || []).slice().reverse().forEach(sess => {
       const div = document.createElement('div');
@@ -315,7 +295,7 @@
   }
 
   function renderMeals(filter = '') {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.selectedMeals) return;
     mealList.innerHTML = '';
     const q = (filter || '').toLowerCase();
     mealDatabase
@@ -337,7 +317,7 @@
   }
 
   function renderSelectedMeals() {
-    if (!currentUser) return;
+    if (!currentUser || !currentUser.selectedMeals) return;
     selectedMealsEl.innerHTML = '';
     const total = (currentUser.selectedMeals || []).reduce((s, m) => s + m.calories, 0);
     totalMealCaloriesEl.textContent = total;
@@ -389,6 +369,7 @@
   }
 
   async function updateProfileField(field, value) {
+    if (!currentUser || !currentUser.profile) return;
     currentUser.profile[field] = value;
     try {
       await updateProfile(currentUser.profile);
@@ -478,9 +459,7 @@
 
   // Main render
   async function renderApp() {
-    const token = localStorage.getItem('token');
-    if (!token){
-      // show auth
+    if (!token) {
       authContainer.classList.remove('hidden');
       appEl.classList.add('hidden');
       setAuthMode(true);
@@ -488,23 +467,27 @@
       return;
     }
 
-    // Optionally fetch user data with token
-    // fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()).then(user => { cachedUser = user; ... })
+    try {
+      currentUser = await fetchUser();
+      authContainer.classList.add('hidden');
+      appEl.classList.remove('hidden');
+      welcomeText.textContent = `Welcome, ${currentUser.username}!`;
 
-    authContainer.classList.add('hidden');
-    appEl.classList.remove('hidden');
-    welcomeText.textContent = `Welcome, ${currentUsername}!`;
+      inputWeight.value = currentUser.profile.weight || '';
+      inputHeight.value = currentUser.profile.height || '';
+      inputAge.value = currentUser.profile.age || '';
+      inputGender.value = currentUser.profile.gender || '';
+      calorieGoalInput.value = currentUser.calorieGoal || 2000;
 
-    inputWeight.value = currentUser.profile.weight || '';
-    inputHeight.value = currentUser.profile.height || '';
-    inputAge.value = currentUser.profile.age || '';
-    inputGender.value = currentUser.profile.gender || '';
-    calorieGoalInput.value = currentUser.calorieGoal || 2000;
-
-    setActiveTab('profile');
-    renderProfile();
-    renderExercises();
-    renderMeals();
+      setActiveTab('profile');
+      renderProfile();
+      renderExercises();
+      renderMeals();
+    } catch (error) {
+      token = null;
+      localStorage.removeItem('token');
+      renderApp();
+    }
   }
 
   // Bootstrap
